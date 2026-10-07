@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VISIONPATH — GPS-Denied Visual Path Following GCS</title>
+  <meta name="description" content="Ground Control Station for GPS-denied autonomous drone flight using forward-facing visual path following, waypoint navigation, and MAVLink telemetry." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/hud.css" />
+  <link rel="stylesheet" href="css/camera.css" />
+  <link rel="stylesheet" href="css/panels.css" />
+  <link rel="stylesheet" href="css/modals.css" />
+</head>
+<body>
+
+  <!-- ════════════════════════════ BOOT SPLASH ════════════════════════════ -->
+  <div id="boot-splash">
+    <div class="boot-logo">
+      <svg class="boot-hex" viewBox="0 0 120 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="60,5 115,35 115,105 60,135 5,105 5,35" stroke="#00e5ff" stroke-width="2" fill="none"/>
+        <polygon points="60,20 100,43 100,97 60,120 20,97 20,43" stroke="#00e5ff" stroke-width="1" fill="rgba(0,229,255,0.04)"/>
+        <text x="60" y="80" text-anchor="middle" font-family="Orbitron" font-size="14" fill="#00e5ff">VP</text>
+      </svg>
+      <h1>VISIONPATH</h1>
+      <p>GPS-Denied Visual Path Following System</p>
+    </div>
+    <div class="boot-progress-wrap">
+      <div class="boot-progress-bar" id="boot-bar"></div>
+    </div>
+    <div class="boot-status" id="boot-status">Initializing systems…</div>
+  </div>
+
+  <!-- ════════════════════════════ MAIN APP ════════════════════════════ -->
+  <div id="app" class="hidden">
+
+    <!-- ── TOP HUD BAR ── -->
+    <header id="hud-bar">
+      <div class="hud-brand">
+        <svg class="hud-hex" viewBox="0 0 40 46" fill="none">
+          <polygon points="20,2 38,12 38,34 20,44 2,34 2,12" stroke="#00e5ff" stroke-width="1.5" fill="rgba(0,229,255,0.08)"/>
+          <text x="20" y="28" text-anchor="middle" font-family="Orbitron" font-size="8" fill="#00e5ff" font-weight="700">VP</text>
+        </svg>
+        <span class="brand-name">VISIONPATH</span>
+      </div>
+
+      <div class="hud-metrics">
+        <div class="hud-tile" id="hud-alt">
+          <span class="tile-label">ALTITUDE</span>
+          <span class="tile-value"><span id="val-alt">—</span><span class="tile-unit">m</span></span>
+        </div>
+        <div class="hud-tile" id="hud-speed">
+          <span class="tile-label">AIRSPEED</span>
+          <span class="tile-value"><span id="val-speed">—</span><span class="tile-unit">m/s</span></span>
+        </div>
+        <div class="hud-tile" id="hud-hdg">
+          <span class="tile-label">HEADING</span>
+          <span class="tile-value"><span id="val-hdg">—</span><span class="tile-unit">°</span></span>
+        </div>
+        <div class="hud-tile" id="hud-pitch">
+          <span class="tile-label">PITCH</span>
+          <span class="tile-value"><span id="val-pitch">—</span><span class="tile-unit">°</span></span>
+        </div>
+        <div class="hud-tile" id="hud-roll">
+          <span class="tile-label">ROLL</span>
+          <span class="tile-value"><span id="val-roll">—</span><span class="tile-unit">°</span></span>
+        </div>
+        <div class="hud-tile" id="hud-dev">
+          <span class="tile-label">DEVIATION</span>
+          <span class="tile-value"><span id="val-dev">0.00</span><span class="tile-unit">m</span></span>
+        </div>
+        <div class="hud-tile" id="hud-batt">
+          <span class="tile-label">BATTERY</span>
+          <span class="tile-value"><span id="val-batt">—</span><span class="tile-unit">%</span></span>
+          <div class="batt-bar-wrap"><div class="batt-bar" id="batt-bar"></div></div>
+        </div>
+        <div class="hud-tile" id="hud-mode">
+          <span class="tile-label">FLIGHT MODE</span>
+          <span class="tile-value mode-badge" id="val-mode">DISARMED</span>
+        </div>
+        <div class="hud-tile" id="hud-link">
+          <span class="tile-label">LINK</span>
+          <span class="tile-value"><span class="link-dot" id="link-dot"></span><span id="val-link">OFFLINE</span></span>
+        </div>
+      </div>
+
+      <div class="hud-actions">
+        <button id="btn-rec" class="hud-btn btn-rec" title="Record flight telemetry (CSV)">⏺ REC</button>
+        <button id="btn-arm" class="hud-btn btn-arm" title="ARM / DISARM drone">ARM</button>
+        <button id="btn-rtl" class="hud-btn btn-rtl" title="Return to Launch">RTL</button>
+        <button id="btn-land" class="hud-btn btn-land" title="Precision Land">LAND</button>
+        <button id="btn-settings" class="hud-btn btn-icon" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- ── MAIN CONTENT AREA ── -->
+    <main id="main-content">
+
+      <!-- LEFT PANEL -->
+      <aside id="panel-left">
+
+        <!-- Deviation Gauge -->
+        <section class="panel-card" id="card-deviation">
+          <h2 class="card-title">PATH DEVIATION</h2>
+          <div class="dev-gauge-wrap">
+            <canvas id="dev-gauge" width="180" height="240"></canvas>
+          </div>
+          <div class="dev-direction" id="dev-direction">
+            <span class="dir-label" id="dir-label">ON PATH</span>
+            <span class="dir-arrow" id="dir-arrow">▲</span>
+          </div>
+          <div class="dev-stats">
+            <div class="dev-stat"><span class="ds-lbl">Cross-track</span><span class="ds-val" id="stat-xte">0.00 m</span></div>
+            <div class="dev-stat"><span class="ds-lbl">Along-track</span><span class="ds-val" id="stat-ate">0.00 m</span></div>
+            <div class="dev-stat"><span class="ds-lbl">Correction</span><span class="ds-val" id="stat-corr">NONE</span></div>
+          </div>
+        </section>
+
+        <!-- Attitude Indicator -->
+        <section class="panel-card" id="card-attitude">
+          <h2 class="card-title">ATTITUDE</h2>
+          <div class="attitude-wrap">
+            <canvas id="attitude-canvas" width="160" height="160"></canvas>
+          </div>
+          <div class="att-stats">
+            <div class="att-stat"><span>PITCH</span><span id="att-pitch">0.0°</span></div>
+            <div class="att-stat"><span>ROLL</span><span id="att-roll">0.0°</span></div>
+            <div class="att-stat"><span>YAW</span><span id="att-yaw">0.0°</span></div>
+          </div>
+        </section>
+
+        <!-- MAVLink Log -->
+        <section class="panel-card" id="card-mavlink">
+          <h2 class="card-title">MAVLINK LOG</h2>
+          <div class="mav-log" id="mav-log"></div>
+        </section>
+
+      </aside>
+
+      <!-- CENTER: CAMERA FEED + OVERLAY -->
+      <section id="camera-section">
+        <div id="cam-toolbar">
+          <div class="cam-mode-tabs">
+            <button class="cam-tab active" data-tab="follow" id="tab-follow">PATH FOLLOW</button>
+            <button class="cam-tab" data-tab="calibrate" id="tab-calibrate">CALIBRATE</button>
+            <button class="cam-tab" data-tab="draw" id="tab-draw">DRAW PATH</button>
+          </div>
+          <div class="cam-controls">
+            <button class="cam-ctrl-btn btn-snap" id="btn-snap-photo" title="Capture photo snapshot and save to Raspberry Pi">📸 PHOTO</button>
+            <button class="cam-ctrl-btn btn-video-rec" id="btn-rec-video" title="Record video and save to Raspberry Pi">⏺ REC</button>
+            <button class="cam-ctrl-btn" id="btn-open-gallery" title="View media saved on Raspberry Pi">📁 GALLERY</button>
+            <button class="cam-ctrl-btn active" id="btn-toggle-map" title="Toggle 2D Top-Down Metric Map">🗺 2D MAP</button>
+            <button class="cam-ctrl-btn" id="btn-cam-source" title="Toggle camera source">📷 SOURCE</button>
+            <button class="cam-ctrl-btn" id="btn-clear-path" title="Clear drawn path">🗑 CLEAR</button>
+            <button class="cam-ctrl-btn" id="btn-export" title="Export path">💾 EXPORT</button>
+            <button class="cam-ctrl-btn" id="btn-demo" title="Toggle simulated feed">🎬 DEMO</button>
+          </div>
+        </div>
+
+        <!-- Camera viewport -->
+        <div id="cam-viewport">
+          <!-- Simulated video background -->
+          <canvas id="sim-canvas" width="960" height="540"></canvas>
+          <!-- Real video feed (webcam) -->
+          <video id="cam-video" autoplay muted playsinline></video>
+          <!-- Real video feed (Pi MJPEG stream) -->
+          <img id="pi-cam-stream" alt="Pi Camera Stream" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:2;"/>
+          <!-- Overlay canvas for path drawing & HUD overlays -->
+          <canvas id="overlay-canvas"></canvas>
+          <!-- 2D Top-Down Metric Ground Map PIP -->
+          <div id="pip-map-container">
+            <canvas id="pip-map-canvas" width="220" height="180"></canvas>
+          </div>
+          <!-- Shutter Flash Animation -->
+          <div id="shutter-flash"></div>
+          <!-- Live Video Recording Badge -->
+          <div id="rec-live-badge">
+            <div class="rec-pulse-dot"></div>
+            <span>REC PI</span>
+            <span id="rec-timer" style="font-family:var(--font-mono);font-size:12px;color:#fff;">00:00</span>
+          </div>
+          <!-- Center crosshair -->
+          <div id="crosshair">
+            <div class="ch-h"></div>
+            <div class="ch-v"></div>
+            <div class="ch-circle"></div>
+          </div>
+          <!-- Warning banner -->
+          <div id="warning-banner" class="hidden">
+            <span id="warning-text">⚠ DEVIATION EXCEEDED — CORRECTING</span>
+          </div>
+          <!-- Path active indicator -->
+          <div id="path-status-badge">
+            <span class="psb-dot"></span>
+            <span id="psb-label">NO PATH DEFINED</span>
+          </div>
+          <!-- Scan lines aesthetic overlay -->
+          <div id="scan-lines"></div>
+          <!-- Vignette -->
+          <div id="vignette"></div>
+        </div>
+
+        <!-- Bottom info bar -->
+        <div id="cam-infobar">
+          <div class="cib-item"><span class="cib-lbl">ALT (AGL)</span><span class="cib-val" id="cib-alt">— m</span></div>
+          <div class="cib-item"><span class="cib-lbl">SCALE</span><span class="cib-val" id="cib-scale">—</span></div>
+          <div class="cib-item"><span class="cib-lbl">FOV</span><span class="cib-val" id="cib-fov">—°</span></div>
+          <div class="cib-item"><span class="cib-lbl">CAL STATUS</span><span class="cib-val" id="cib-cal">UNCALIBRATED</span></div>
+          <div class="cib-item"><span class="cib-lbl">WP ACTIVE</span><span class="cib-val" id="cib-wp">—/—</span></div>
+          <div class="cib-item"><span class="cib-lbl">NEXT WP DIST</span><span class="cib-val" id="cib-nwp">— m</span></div>
+          <div class="cib-item scale-ruler">
+            <canvas id="scale-ruler" width="200" height="24"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT PANEL -->
+      <aside id="panel-right">
+
+        <!-- Waypoints -->
+        <section class="panel-card" id="card-waypoints">
+          <h2 class="card-title">WAYPOINTS
+            <button class="card-action" id="btn-add-wp">+ ADD</button>
+          </h2>
+          <div id="wp-list" class="wp-list"></div>
+          <div class="wp-actions">
+            <button class="wp-btn" id="btn-start-follow">▶ START FOLLOW</button>
+            <button class="wp-btn btn-secondary" id="btn-pause-follow">⏸ PAUSE</button>
+          </div>
+        </section>
+
+        <!-- Camera Calibration -->
+        <section class="panel-card" id="card-cal">
+          <h2 class="card-title">CALIBRATION</h2>
+          <div class="cal-form">
+            <label class="cal-label">Ref. Obj. Distance
+              <div class="cal-input-wrap">
+                <input type="number" id="cal-distance" value="200" min="10" max="5000" step="1" class="cal-input"/>
+                <span class="cal-unit">cm</span>
+              </div>
+            </label>
+            <label class="cal-label">Altitude (AGL)
+              <div class="cal-input-wrap">
+                <input type="number" id="cal-altitude" value="150" min="10" max="10000" step="1" class="cal-input"/>
+                <span class="cal-unit">cm</span>
+              </div>
+            </label>
+            <label class="cal-label">Camera FOV (H)
+              <div class="cal-input-wrap">
+                <input type="number" id="cal-fov" value="62.2" min="10" max="180" step="0.1" class="cal-input"/>
+                <span class="cal-unit">°</span>
+              </div>
+            </label>
+            <label class="cal-label">Camera Tilt
+              <div class="cal-input-wrap">
+                <input type="number" id="cal-tilt" value="0" min="-90" max="90" step="1" class="cal-input"/>
+                <span class="cal-unit">°</span>
+              </div>
+            </label>
+            <button class="cal-btn" id="btn-calibrate">▣ CALIBRATE NOW</button>
+            <button class="cal-btn btn-secondary" id="btn-open-cal-wizard">⊕ CALIBRATION WIZARD</button>
+          </div>
+          <div class="cal-result" id="cal-result">
+            <div class="cal-res-row"><span>px/m ratio:</span><span id="cr-pxm">—</span></div>
+            <div class="cal-res-row"><span>GSD:</span><span id="cr-gsd">— cm/px</span></div>
+            <div class="cal-res-row"><span>Ground Width:</span><span id="cr-gw">— m</span></div>
+          </div>
+        </section>
+
+        <!-- Connection Settings -->
+        <section class="panel-card" id="card-connection">
+          <h2 class="card-title">CONNECTION</h2>
+          <div class="conn-form">
+            <div class="conn-quick-btns">
+              <button class="conn-quick-btn" type="button" id="btn-quick-pi" title="Set IP to Raspberry Pi">⚡ Pi (10.89.89.85)</button>
+              <button class="conn-quick-btn" type="button" id="btn-quick-local" title="Set IP to Localhost">💻 Local (127.0.0.1)</button>
+            </div>
+            <label class="conn-label">MAVLink WS Host / IP
+              <input type="text" id="conn-host" value="127.0.0.1" class="conn-input" placeholder="127.0.0.1 or 10.89.89.85"/>
+            </label>
+            <label class="conn-label">MAVLink WS Port (Port 8081)
+              <input type="number" id="conn-port" value="8081" class="conn-input"/>
+            </label>
+            <label class="conn-label">Camera Port (camera_server.py)
+              <input type="number" id="conn-cam-port" value="8080" class="conn-input"/>
+            </label>
+            <label class="conn-label">Cam Stream Path
+              <input type="text" id="conn-cam-path" value="/stream.mjpg" class="conn-input" placeholder="/stream.mjpg"/>
+            </label>
+            <button class="conn-btn" id="btn-connect">⚡ CONNECT</button>
+            <button class="conn-btn btn-secondary" id="btn-disconnect" disabled>✕ DISCONNECT</button>
+          </div>
+          <div class="conn-status" id="conn-status">
+            <div class="cs-row"><span>CAMERA:</span><span class="cs-badge offline" id="cs-cam">OFFLINE</span></div>
+            <div class="cs-row"><span>MAVLINK:</span><span class="cs-badge offline" id="cs-mav">OFFLINE</span></div>
+            <div class="cs-row"><span>PI AGENT:</span><span class="cs-badge offline" id="cs-pi">OFFLINE</span></div>
+          </div>
+        </section>
+
+      </aside>
+    </main>
+
+    <!-- ── BOTTOM STATUS BAR ── -->
+    <footer id="status-bar">
+      <div class="sb-item"><span class="sb-lbl">SYS STATUS</span><span class="sb-val" id="sb-sys">STANDBY</span></div>
+      <div class="sb-item"><span class="sb-lbl">CORRECTION</span><span class="sb-val corr-val" id="sb-corr">NONE</span></div>
+      <div class="sb-item"><span class="sb-lbl">AUTO-CORRECT</span><span class="sb-val" id="sb-auto">OFF</span></div>
+      <div class="sb-item"><span class="sb-lbl">THRESHOLD</span><span class="sb-val" id="sb-thresh">2.00 m</span></div>
+      <div class="sb-item"><span class="sb-lbl">LAST CMD</span><span class="sb-val mono" id="sb-cmd">—</span></div>
+      <div class="sb-sep"></div>
+      <div class="sb-item"><span class="sb-lbl">LOCAL TIME</span><span class="sb-val mono" id="sb-time">—</span></div>
+      <div class="sb-item"><span class="sb-lbl">UPTIME</span><span class="sb-val mono" id="sb-uptime">00:00:00</span></div>
+    </footer>
+
+  </div><!-- /app -->
+
+  <!-- ════════════════════ MODALS ════════════════════ -->
+
+  <!-- Calibration Wizard Modal -->
+  <div id="modal-cal-wizard" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>📐 Calibration Wizard</h2>
+        <button class="modal-close" id="close-cal-wizard">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="wizard-steps" id="wizard-steps">
+          <div class="wstep active" data-step="1">
+            <div class="wstep-num">1</div>
+            <span>Place Object</span>
+          </div>
+          <div class="wstep" data-step="2">
+            <div class="wstep-num">2</div>
+            <span>Mark Object</span>
+          </div>
+          <div class="wstep" data-step="3">
+            <div class="wstep-num">3</div>
+            <span>Enter Distance</span>
+          </div>
+          <div class="wstep" data-step="4">
+            <div class="wstep-num">4</div>
+            <span>Confirm</span>
+          </div>
+        </div>
+        <div id="wizard-content">
+          <div class="wiz-panel active" id="wiz-step-1">
+            <h3>Step 1 — Place Reference Object</h3>
+            <p>Place a clearly visible object at a <strong>known distance</strong> to the left or right of the drone. Make sure it is visible in the camera feed. Point the camera forward (horizontally level).</p>
+            <ul>
+              <li>Object should be at a measured distance (e.g. 200 cm)</li>
+              <li>Object should contrast clearly with the background</li>
+              <li>Keep drone stationary during calibration</li>
+            </ul>
+            <button class="wiz-btn" onclick="wizardNext()">Next ›</button>
+          </div>
+          <div class="wiz-panel" id="wiz-step-2">
+            <h3>Step 2 — Mark Object in Feed</h3>
+            <p>Click on the <strong>center of the reference object</strong> in the camera preview below. The system will record the pixel position relative to the image center.</p>
+            <canvas id="wiz-cam" width="640" height="360" style="width:100%;border-radius:8px;cursor:crosshair;border:1px solid var(--c-border)"></canvas>
+            <p id="wiz-mark-info" style="color:var(--c-accent);margin-top:8px;font-family:var(--font-mono)">Click on the object in the feed above ↑</p>
+            <button class="wiz-btn" onclick="wizardNext()" id="wiz-btn-2" disabled>Next ›</button>
+          </div>
+          <div class="wiz-panel" id="wiz-step-3">
+            <h3>Step 3 — Enter Real-World Distance</h3>
+            <p>Enter the actual measured distance from the drone to the reference object.</p>
+            <div class="wiz-input-row">
+              <input type="number" id="wiz-dist" value="200" min="1" max="10000" class="wiz-input"/>
+              <span class="wiz-unit">cm</span>
+            </div>
+            <p>Enter the current altitude of the drone.</p>
+            <div class="wiz-input-row">
+              <input type="number" id="wiz-alt" value="150" min="1" max="10000" class="wiz-input"/>
+              <span class="wiz-unit">cm AGL</span>
+            </div>
+            <button class="wiz-btn" onclick="wizardNext()">Calculate ›</button>
+          </div>
+          <div class="wiz-panel" id="wiz-step-4">
+            <h3>Step 4 — Calibration Result</h3>
+            <div id="wiz-result" class="wiz-result"></div>
+            <button class="wiz-btn" onclick="wizardApply()">✓ Apply & Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="modal-settings" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>⚙ System Settings</h2>
+        <button class="modal-close" id="close-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-grid">
+          <div class="sg-group">
+            <h3>Path Following</h3>
+            <label class="sg-label">Correction Threshold (m)
+              <input type="number" id="set-thresh" value="2.0" min="0.1" max="20" step="0.1" class="sg-input"/>
+            </label>
+            <label class="sg-label">Max Correction Angle (°)
+              <input type="number" id="set-max-angle" value="15" min="1" max="45" class="sg-input"/>
+            </label>
+            <label class="sg-label">Approach Speed (m/s)
+              <input type="number" id="set-speed" value="1.5" min="0.1" max="10" step="0.1" class="sg-input"/>
+            </label>
+          </div>
+          <div class="sg-group">
+            <h3>Landing</h3>
+            <label class="sg-label">Landing Descent Rate (m/s)
+              <input type="number" id="set-descent" value="0.3" min="0.05" max="2" step="0.05" class="sg-input"/>
+            </label>
+            <label class="sg-label">Final Waypoint Hover Time (s)
+              <input type="number" id="set-hover" value="3" min="0" max="30" class="sg-input"/>
+            </label>
+          </div>
+          <div class="sg-group">
+            <h3>Display</h3>
+            <label class="sg-label toggle-label">Show Scan Lines
+              <input type="checkbox" id="set-scanlines" checked class="sg-toggle"/>
+            </label>
+            <label class="sg-label toggle-label">Auto-Correct Enabled
+              <input type="checkbox" id="set-autocorrect" checked class="sg-toggle"/>
+            </label>
+            <label class="sg-label toggle-label">Show Path Prediction
+              <input type="checkbox" id="set-prediction" checked class="sg-toggle"/>
+            </label>
+          </div>
+          <div class="sg-group">
+            <h3>Camera</h3>
+            <label class="sg-label">Source
+              <select id="set-cam-src" class="sg-select">
+                <option value="sim">Simulated Feed</option>
+                <option value="webcam">Laptop Webcam</option>
+                <option value="pi">Pi Camera (Network)</option>
+              </select>
+            </label>
+            <label class="sg-label">Resolution
+              <select id="set-cam-res" class="sg-select">
+                <option value="640x480">640×480</option>
+                <option value="960x540" selected>960×540</option>
+                <option value="1280x720">1280×720</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <button class="sg-save" id="btn-save-settings">✓ Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Media Gallery Modal -->
+  <div id="modal-gallery" class="modal-backdrop hidden">
+    <div class="modal-box" style="width: min(840px, 94vw);">
+      <div class="modal-header">
+        <h2>📁 Raspberry Pi Saved Media Gallery</h2>
+        <button class="modal-close" id="close-gallery">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="gallery-toolbar">
+          <div class="gallery-stats" id="gallery-stats">Loading captures from Raspberry Pi…</div>
+          <button class="gallery-refresh-btn" id="btn-refresh-gallery">↻ Refresh List</button>
+        </div>
+        <div class="gallery-grid" id="gallery-grid">
+          <div class="gallery-empty">No photos or videos captured yet. Use 📸 PHOTO or ⏺ REC in the camera toolbar.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification toast -->
+  <div id="toast-container"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/calibration.js"></script>
+  <script src="js/simulation.js"></script>
+  <script src="js/pathManager.js"></script>
+  <script src="js/deviation.js"></script>
+  <script src="js/mavlink.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/flightRecorder.js"></script>
+  <script src="js/topDownMap.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+/* ═══════════════════════════════════════════════════════════════
+   VISIONPATH — Main Style Sheet
+   Design system tokens, reset, layout, boot splash, toasts
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Fonts & Custom Properties ── */
+:root {
+  --font-ui:   'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --font-hud:  'Orbitron', 'Inter', sans-serif;
+
+  /* Colour palette */
+  --c-bg:         #080c12;
+  --c-surface:    #0d1420;
+  --c-surface2:   #111a27;
+  --c-surface3:   #162032;
+  --c-border:     rgba(0,229,255,0.12);
+  --c-border2:    rgba(0,229,255,0.22);
+
+  --c-accent:     #00e5ff;
+  --c-accent2:    #00b4d8;
+  --c-accent3:    #0077b6;
+  --c-accent-dim: rgba(0,229,255,0.15);
+
+  --c-ok:      #00ff99;
+  --c-warn:    #ffb700;
+  --c-danger:  #ff3a5c;
+  --c-purple:  #a855f7;
+
+  --c-text:       #d0e8f5;
+  --c-text-dim:   #6a8fa8;
+  --c-text-muted: #3a556b;
+
+  /* Layout */
+  --hud-h:    56px;
+  --status-h: 34px;
+  --panel-w:  240px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --fast: 120ms;
+  --mid:  250ms;
+  --slow: 500ms;
+
+  /* Glow effects */
+  --glow-accent: 0 0 20px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1);
+  --glow-ok:     0 0 12px rgba(0,255,153,0.4);
+  --glow-danger: 0 0 20px rgba(255,58,92,0.4), 0 0 60px rgba(255,58,92,0.15);
+  --glow-warn:   0 0 12px rgba(255,183,0,0.4);
+}
+
+/* ── CSS Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button { cursor: pointer; font-family: inherit; }
+input, select { font-family: inherit; }
+canvas { display: block; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--c-surface); }
+::-webkit-scrollbar-thumb { background: var(--c-accent3); border-radius: 3px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOT SPLASH
+═══════════════════════════════════════════════════════════════ */
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--c-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  transition: opacity var(--slow) var(--ease), visibility var(--slow);
+}
+#boot-splash.fade-out { opacity: 0; visibility: hidden; }
+
+.boot-logo {
+  text-align: center;
+  animation: bootPulse 2s infinite alternate;
+}
+.boot-hex {
+  width: 100px;
+  height: 116px;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 0 24px rgba(0,229,255,0.6));
+}
+.boot-logo h1 {
+  font-family: var(--font-hud);
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--c-accent);
+  text-shadow: var(--glow-accent);
+}
+.boot-logo p {
+  margin-top: 8px;
+  color: var(--c-text-dim);
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.boot-progress-wrap {
+  width: 320px;
+  height: 3px;
+  background: var(--c-surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.boot-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--c-accent3), var(--c-accent));
+  border-radius: 2px;
+  transition: width 0.3s var(--ease);
+  box-shadow: var(--glow-accent);
+}
+.boot-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-text-dim);
+  letter-spacing: 1px;
+}
+
+@keyframes bootPulse {
+  from { filter: drop-shadow(0 0 16px rgba(0,229,255,0.3)); }
+  to   { filter: drop-shadow(0 0 40px rgba(0,229,255,0.7)); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP LAYOUT
+═══════════════════════════════════════════════════════════════ */
+#app {
+  display: grid;
+  grid-template-rows: var(--hud-h) 1fr var(--status-h);
+  grid-template-columns: 1fr;
+  height: 100vh;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--slow) var(--ease);
+}
+#app.visible { opacity: 1; }
+#app.hidden { display: none; }
+
+#main-content {
+  display: grid;
+  grid-template-columns: var(--panel-w) 1fr var(--panel-w);
+  overflow: hidden;
+  gap: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+═══════════════════════════════════════════════════════════════ */
+#toast-container {
+  position: fixed;
+  bottom: calc(var(--status-h) + 12px);
+  right: 16px;
+  z-index: 8888;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--c-text);
+  backdrop-filter: blur(12px);
+  animation: toastIn var(--mid) var(--ease) forwards;
+  pointer-events: all;
+  max-width: 280px;
+}
+.toast.ok     { border-color: var(--c-ok);     color: var(--c-ok); }
+.toast.warn   { border-color: var(--c-warn);   color: var(--c-warn); }
+.toast.danger { border-color: var(--c-danger); color: var(--c-danger); }
+.toast.fade   { animation: toastOut var(--mid) var(--ease) forwards; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(20px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════════════════════ */
+#status-bar {
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  overflow: hidden;
+}
+.sb-item { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sb-lbl { font-size: 9px; letter-spacing: 1px; color: var(--c-text-muted); text-transform: uppercase; }
+.sb-val { font-family: var(--font-mono); font-size: 11px; color: var(--c-text); }
+.sb-val.mono { color: var(--c-accent); }
+.corr-val { color: var(--c-accent); transition: color var(--mid); }
+.corr-val.left  { color: #ff9100; }
+.corr-val.right { color: #ff9100; }
+.corr-val.none  { color: var(--c-ok); }
+.sb-sep { flex: 1; }
+
+/* utility */
+.hidden { display: none !important; }

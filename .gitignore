@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.tlog
+.env
+.venv/
+venv/
+mavproxy-env/
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
