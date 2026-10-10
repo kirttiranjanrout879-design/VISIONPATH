@@ -190,9 +190,59 @@
 .wp-item.active .wp-num   { background: var(--c-ok); border-color: var(--c-ok); color: var(--c-bg); }
 .wp-item.final  .wp-num   { background: var(--c-danger); border-color: var(--c-danger); color: #fff; }
 
-.wp-info { flex: 1; min-width: 0; }
-.wp-label { font-size: 11px; color: var(--c-text); font-weight: 500; }
-.wp-coords { font-family: var(--font-mono); font-size: 9px; color: var(--c-text-dim); }
+.wp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wp-header-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.wp-label { font-size: 11px; color: var(--c-text); font-weight: 600; font-family: var(--font-hud); letter-spacing: 0.5px; }
+
+.wp-turn-badge {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--c-surface3);
+  border: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+}
+.wp-turn-badge.right { background: rgba(0, 229, 255, 0.12); color: #00e5ff; border-color: rgba(0, 229, 255, 0.4); }
+.wp-turn-badge.left  { background: rgba(255, 183, 0, 0.12); color: #ffb700; border-color: rgba(255, 183, 0, 0.4); }
+.wp-turn-badge.straight { background: rgba(0, 255, 153, 0.12); color: #00ff99; border-color: rgba(0, 255, 153, 0.4); }
+
+.wp-metric-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.wp-dist-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  color: var(--c-text-dim);
+  font-family: var(--font-mono);
+}
+.wp-dist-input {
+  width: 48px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-accent);
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border2);
+  border-radius: 3px;
+  outline: none;
+  text-align: right;
+  transition: all var(--fast);
+}
+.wp-dist-input:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+  background: var(--c-bg);
+}
+
+.wp-hdg-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--c-text-dim);
+}
+
 .wp-del {
   width: 18px; height: 18px;
   border-radius: 3px;
@@ -205,6 +255,7 @@
   flex-shrink: 0;
 }
 .wp-del:hover { color: var(--c-danger); background: rgba(255,58,92,0.12); }
+
 
 .wp-actions { display: flex; gap: 6px; }
 .wp-btn {

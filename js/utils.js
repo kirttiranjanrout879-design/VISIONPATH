@@ -75,6 +75,33 @@ function alongTrack(px, py, ax, ay, bx, by) {
   return ((px - ax) * dx + (py - ay) * dy) / Math.sqrt(len2);
 }
 
+/** Normalize angle in degrees to range [-180, 180) */
+function normalizeAngleDeg(deg) {
+  let a = (deg + 180) % 360;
+  if (a < 0) a += 360;
+  return a - 180;
+}
+
+/** Wrap angle in degrees to range [0, 360) */
+function wrap360(deg) {
+  let a = deg % 360;
+  if (a < 0) a += 360;
+  return a;
+}
+
+/** Canvas helper for rounded rectangles */
+function _roundRect(ctx, x, y, width, height, radius) {
+  if (width < 2 * radius) radius = width / 2;
+  if (height < 2 * radius) radius = height / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+}
+
 /** Get element by id shorthand */
 const $ = id => document.getElementById(id);
 
@@ -83,3 +110,4 @@ function nowTs() {
   const d = new Date();
   return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}.${d.getMilliseconds().toString().padStart(3,'0')}`;
 }
+

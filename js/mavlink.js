@@ -30,7 +30,7 @@ const MAVLink = (() => {
     compid:      null,
     firmware:    null,
     armed:       false,
-    mode:        'DISARMED',
+    mode:        'ALT_HOLD',
     alt:         null,
     rel_alt:     null,
     speed:       null,
@@ -45,6 +45,12 @@ const MAVLink = (() => {
     gps_sats:    null,
     lat:         null,
     lon:         null,
+    local_x:     null,
+    local_y:     null,
+    local_z:     null,
+    vx:          null,
+    vy:          null,
+    vz:          null,
     rc_channels: []
   };
 
@@ -239,6 +245,12 @@ const MAVLink = (() => {
       if (d.gps_sats !== undefined)    _telem.gps_sats = d.gps_sats;
       if (d.lat !== undefined)         _telem.lat = d.lat;
       if (d.lon !== undefined)         _telem.lon = d.lon;
+      if (d.local_x !== undefined)     _telem.local_x = d.local_x;
+      if (d.local_y !== undefined)     _telem.local_y = d.local_y;
+      if (d.local_z !== undefined)     _telem.local_z = d.local_z;
+      if (d.vx !== undefined)          _telem.vx = d.vx;
+      if (d.vy !== undefined)          _telem.vy = d.vy;
+      if (d.vz !== undefined)          _telem.vz = d.vz;
       if (d.rc_channels !== undefined) _telem.rc_channels = d.rc_channels;
 
       // Broadcast to HUD subscribers
@@ -277,6 +289,18 @@ const MAVLink = (() => {
       _telem.rel_alt = msg.GLOBAL_POSITION_INT.relative_alt / 1000.0;
       _telem.lat     = msg.GLOBAL_POSITION_INT.lat / 1e7;
       _telem.lon     = msg.GLOBAL_POSITION_INT.lon / 1e7;
+      if (msg.GLOBAL_POSITION_INT.vx !== undefined) _telem.vx = msg.GLOBAL_POSITION_INT.vx / 100.0;
+      if (msg.GLOBAL_POSITION_INT.vy !== undefined) _telem.vy = msg.GLOBAL_POSITION_INT.vy / 100.0;
+      if (msg.GLOBAL_POSITION_INT.vz !== undefined) _telem.vz = msg.GLOBAL_POSITION_INT.vz / 100.0;
+    }
+
+    if (msg.LOCAL_POSITION_NED) {
+      _telem.local_x = msg.LOCAL_POSITION_NED.x;
+      _telem.local_y = msg.LOCAL_POSITION_NED.y;
+      _telem.local_z = msg.LOCAL_POSITION_NED.z;
+      _telem.vx = msg.LOCAL_POSITION_NED.vx;
+      _telem.vy = msg.LOCAL_POSITION_NED.vy;
+      _telem.vz = msg.LOCAL_POSITION_NED.vz;
     }
 
     if (msg.SYS_STATUS) {
@@ -415,7 +439,7 @@ const MAVLink = (() => {
   }
 
   function sendLateralCorrection(vyM_s, vxM_s = 0.5) {
-    if (!_wsConnected || !_mavlinkOnline) return;
+    if (!_wsConnected) return;
     _sendWs({
       action: 'SET_POSITION_TARGET_LOCAL_NED',
       vy: vyM_s,
@@ -423,11 +447,52 @@ const MAVLink = (() => {
     });
   }
 
+  function sendConditionYaw(targetAngleDeg, yawRateDegS = 20, relative = false) {
+    if (!_wsConnected) return;
+    _sendWs({
+      action: 'CMD_CONDITION_YAW',
+      angle: targetAngleDeg,
+      rate: yawRateDegS,
+      relative: !!relative
+    });
+  }
+
+  function sendGuidedWaypoint(distM, turnDeg = 0.0, speedM_s = 1.0) {
+    if (!_wsConnected) return;
+    _sendWs({
+      action: 'NAV_WAYPOINT_REL',
+      distance: distM,
+      turn: turnDeg,
+      speed: speedM_s
+    });
+  }
+
+  function sendPositionTargetLocalNED(vx = 0.0, vy = 0.0, vz = 0.0, x = null, y = null, z = null) {
+    if (!_wsConnected) return;
+    _sendWs({
+      action: 'SET_POSITION_TARGET_LOCAL_NED',
+      vx: vx,
+      vy: vy,
+      vz: vz,
+      x: x,
+      y: y,
+      z: z
+    });
+  }
+
+  function sendTakeoff(altM = 1.5) {
+    if (!_wsConnected) { toast('Cannot Takeoff — WebSocket disconnected', 'danger'); return; }
+    log('TX', `CMD_NAV_TAKEOFF alt=${altM}m`);
+    _sendWs({ action: 'CMD_NAV_TAKEOFF', alt: altM });
+    toast(`🛫 Takeoff command sent (Alt: ${altM}m)`, 'info', 3000);
+  }
+
   function _sendWs(payload) {
     if (_ws && _ws.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify(payload));
     }
   }
+
 
   // ── Logging ───────────────────────────────────────────────────
   function log(dir, msg) {
@@ -557,7 +622,12 @@ const MAVLink = (() => {
     land,
     setMode,
     sendLateralCorrection,
+    sendConditionYaw,
+    sendGuidedWaypoint,
+    sendPositionTargetLocalNED,
+    sendTakeoff,
     log,
     runHardwareDiagnostics
   };
 })();
+

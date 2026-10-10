@@ -110,51 +110,78 @@ function _launch() {
 
 // ── Main render loop ──────────────────────────────────────────
 let _loopFrame = 0;
-function _mainLoop() {
+let _lastFrameTime = performance.now();
+
+function _mainLoop(now) {
   _loopFrame++;
+  const curTime = (typeof now === 'number') ? now : performance.now();
+  const dt = Math.min(0.1, (curTime - _lastFrameTime) / 1000) || 0.016;
+  _lastFrameTime = curTime;
   _uptime = (Date.now() - _startTime) / 1000;
 
-  // ── Drone screen position (for path follow, use center-bottom of camera) ──
-  const overlay = $('overlay-canvas');
-  const droneX  = overlay.width / 2;
-  const droneY  = overlay.height * 0.82;
+  // ── 1. Telemetry State Sync ─────────────────────────────────
+  let telem = MAVLink.getTelem ? MAVLink.getTelem() : {};
+  if (Simulation.isRunning() && (!MAVLink.isMavlinkOnline() || telem.heading === null)) {
+    const simDrone = Simulation.getDrone();
+    telem = {
+      alt: (simDrone.alt || 150) / 100,
+      airspeed: 0.0,
+      speed: 0.0,
+      heading: simDrone.yaw || 0,
+      pitch: simDrone.pitch || 0,
+      roll: simDrone.roll || 0,
+      battery: simDrone.batt || 88,
+      mode: 'ALT_HOLD',
+      armed: true
+    };
+    HUD.updateTelemetry(telem);
+  }
 
-  // ── Path deviation computation ──────────────────────────────
+  // ── 2. Update PathManager Navigation & Progress ─────────────
+  const navEvent = PathManager.updateNavigation(dt, telem);
+  if (navEvent) {
+    _onWaypointsChanged(PathManager.getWaypoints(), PathManager.getActiveIdx());
+  }
+
+  // ── 3. Drone screen position (center-bottom with dynamic drift) ──
+  const overlay = $('overlay-canvas');
+  const overlayW = overlay ? overlay.width : 960;
+  const overlayH = overlay ? overlay.height : 540;
+  const droneX = overlayW / 2;
+  const droneY = overlayH * 0.82;
+
+  // ── 4. Path deviation computation ───────────────────────────
   const dev = PathManager.getDeviation(droneX, droneY);
   DeviationEngine.update(dev.xte, dev.ate, dev.side);
 
-  // ── Check waypoint reaching ─────────────────────────────────
-  const wpRes = PathManager.checkWaypointReached(droneX, droneY, 50);
-  if (wpRes) _onWaypointsChanged(PathManager.getWaypoints(), PathManager.getActiveIdx());
-
-  // ── Draw path overlay ────────────────────────────────────────
+  // ── 5. Draw Dynamic AR Path & Drone Overlay ─────────────────
   PathManager.draw(droneX, droneY);
 
-  // ── Draw 2D Metric Ground Map (PIP) ─────────────────────────
+  // ── 6. Draw 2D Top-Down Metric Ground Map (PIP) ─────────────
   const wps = PathManager.getWaypoints();
   const ai  = PathManager.getActiveIdx();
-  const telem = MAVLink.getTelem ? MAVLink.getTelem() : {};
-  TopDownMap.render(wps, ai, dev.xteM || 0, telem.heading || 0);
+  const droneMetricPos = PathManager.getDronePos();
+  TopDownMap.render(wps, ai, dev.xteM || 0, telem.heading || 0, droneMetricPos);
 
-  // ── Draw scale ruler ────────────────────────────────────────
+  // ── 7. Draw Scale ruler ─────────────────────────────────────
   if (_loopFrame % 30 === 0) HUD.drawScaleRuler();
 
-  // ── Update waypoint info bar ─────────────────────────────────
+  // ── 8. Update waypoint info bar ─────────────────────────────
   const cibWp  = $('cib-wp');
   const cibNwp = $('cib-nwp');
   if (cibWp)  cibWp.textContent  = wps.length > 0 ? `${ai + 1}/${wps.length}` : '—/—';
   if (cibNwp && wps.length > 0 && ai < wps.length) {
     const nextWp = wps[Math.min(ai, wps.length - 1)];
-    const dPx = dist2d(droneX, droneY, nextWp.x, nextWp.y);
-    const cal = Calibration.getState();
-    const dM  = cal.calibrated ? dPx / cal.pixelsPerMeter : 0;
-    cibNwp.textContent = `${fmt(dM, 1)} m`;
+    const distRem = (dev.distRem !== undefined && dev.distRem > 0) ? dev.distRem : nextWp.distFromPrev;
+    const turnStr = (nextWp.turnAngleDeg !== undefined)
+      ? ` • ${nextWp.turnAngleDeg > 2 ? '+' : ''}${fmt(nextWp.turnAngleDeg, 0)}°`
+      : '';
+    cibNwp.textContent = `${fmt(distRem, 1)} m${turnStr}`;
   } else if (cibNwp) cibNwp.textContent = '— m';
 
-  // ── Sim-to-overlay sync (deviation feed from sim) ───────────
+  // ── 9. Sim-to-overlay sync (deviation feed from sim) ────────
   if (Simulation.isRunning()) {
     const pathOff = Simulation.getPathOffset();
-    // Update XTE readout from simulation drift
     const el = $('val-dev');
     if (el && !PathManager.isFollowing()) {
       el.textContent = fmt(Math.abs(pathOff * 0.002), 2);
@@ -185,14 +212,14 @@ function _resizeCanvases() {
   PathManager.resize(W, H);
 }
 
-// ── Waypoint list renderer ─────────────────────────────────────
+// ── Waypoint list renderer with exact Distance & Turn fields ───
 function _onWaypointsChanged(wps, activeIdx) {
   const list = $('wp-list');
   if (!list) return;
   list.innerHTML = '';
 
   if (wps.length === 0) {
-    list.innerHTML = '<div style="color:var(--c-text-muted);font-size:10px;text-align:center;padding:12px">No waypoints. Use DRAW PATH tab to place waypoints on the camera feed.</div>';
+    list.innerHTML = '<div style="color:var(--c-text-muted);font-size:10px;text-align:center;padding:12px">No waypoints. Use DRAW PATH tab to click and place waypoints on the camera feed.</div>';
     $('path-status-badge').className = '';
     $('psb-label').textContent = 'NO PATH DEFINED';
     return;
@@ -200,14 +227,32 @@ function _onWaypointsChanged(wps, activeIdx) {
 
   wps.forEach((wp, i) => {
     const item = document.createElement('div');
-    item.className = `wp-item${i === activeIdx && PathManager.isFollowing() ? ' active' : ''}${wp.reached ? ' reached' : ''}${wp.final ? ' final' : ''}`;
+    const isAct = (i === activeIdx && PathManager.isFollowing());
+    item.className = `wp-item${isAct ? ' active' : ''}${wp.reached ? ' reached' : ''}${wp.final ? ' final' : ''}`;
+    
+    const turnVal = wp.turnAngleDeg || 0;
+    const turnClass = turnVal > 2 ? 'right' : turnVal < -2 ? 'left' : 'straight';
+    const turnText = turnVal > 2 ? `↷ +${fmt(turnVal, 0)}° R` : turnVal < -2 ? `↶ ${fmt(turnVal, 0)}° L` : '▲ 0° STR';
+
     item.innerHTML = `
       <div class="wp-num">${i + 1}</div>
       <div class="wp-info">
-        <div class="wp-label">${wp.label}${wp.final ? ' 🛬' : ''}</div>
-        <div class="wp-coords">${Math.round(wp.x)}, ${Math.round(wp.y)} px${wp.reached ? ' ✓' : ''}</div>
+        <div class="wp-header-row">
+          <span class="wp-label">${wp.label}${wp.final ? ' 🛬' : ''}</span>
+          <span class="wp-turn-badge ${turnClass}" title="Turn angle relative to path heading">${turnText}</span>
+        </div>
+        <div class="wp-metric-row">
+          <label class="wp-dist-label" title="Exact measured distance to this waypoint">
+            <span>Dist:</span>
+            <input type="number" step="0.1" min="0.2" max="100" class="wp-dist-input" value="${fmt(wp.distFromPrev || 2.0, 2)}"
+                   onchange="PathManager.setWaypointDistance(${i}, this.value)"
+                   onclick="event.stopPropagation()" />
+            <span>m</span>
+          </label>
+          <span class="wp-hdg-tag">HDG ${fmt(wp.targetHeading || 0, 0)}°</span>
+        </div>
       </div>
-      <button class="wp-del" title="Remove" onclick="PathManager.removeWaypoint(${i})">✕</button>
+      <button class="wp-del" title="Remove Waypoint" onclick="event.stopPropagation(); PathManager.removeWaypoint(${i})">✕</button>
     `;
     list.appendChild(item);
   });
@@ -226,6 +271,7 @@ function _onWaypointsChanged(wps, activeIdx) {
   // WP info bar
   $('cib-wp').textContent = `${activeIdx + 1}/${wps.length}`;
 }
+
 
 // ── Clock & uptime ─────────────────────────────────────────────
 function _updateClock() {

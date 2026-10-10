@@ -15,6 +15,7 @@ const DeviationEngine = (() => {
   // ── State ─────────────────────────────────────────────────────
   let _xteM      = 0;    // cross-track error in meters (signed)
   let _atePx     = 0;    // along-track (pixels)
+  let _ateM      = 0;    // along-track (meters)
   let _side      = 'none';
   let _correcting = false;
   let _threshM   = 2.0; // auto-correct threshold (meters)
@@ -39,7 +40,9 @@ const DeviationEngine = (() => {
           : xtePixels * 0.002; // rough fallback: 1px ≈ 2mm at 1.5m alt
 
     _atePx = atePixels;
+    _ateM = cal.calibrated && cal.pixelsPerMeter ? atePixels / cal.pixelsPerMeter : atePixels * 0.002;
     _side  = side;
+
 
     // Smooth the displayed value
     _xteSmoothed = lerp(_xteSmoothed, _xteM, SMOOTH_K);

@@ -78,7 +78,7 @@
         </div>
         <div class="hud-tile" id="hud-mode">
           <span class="tile-label">FLIGHT MODE</span>
-          <span class="tile-value mode-badge" id="val-mode">DISARMED</span>
+          <span class="tile-value mode-badge" id="val-mode">ALT_HOLD</span>
         </div>
         <div class="hud-tile" id="hud-link">
           <span class="tile-label">LINK</span>
@@ -225,6 +225,13 @@
             <button class="card-action" id="btn-add-wp">+ ADD</button>
           </h2>
           <div id="wp-list" class="wp-list"></div>
+          <div class="target-alt-box" style="margin: 8px 0 10px 0; padding: 7px 10px; background: rgba(0, 229, 255, 0.06); border: 1px solid rgba(0, 229, 255, 0.22); border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <label for="target-alt-input" style="font-family: var(--font-mono); font-size: 11px; color: var(--c-cyan); font-weight: 600; letter-spacing: 0.5px;">TARGET ALT:</label>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <input type="number" id="target-alt-input" step="0.1" min="0.2" max="100" placeholder="e.g. 1.5" class="cal-input" style="width: 80px; text-align: center; font-size: 12px; font-weight: 700; color: #00ff99; background: rgba(10, 16, 26, 0.85); border: 1px solid rgba(0, 255, 153, 0.4); border-radius: 3px; padding: 3px 6px;" value="" />
+              <span style="font-size: 11px; color: var(--c-text-dim); font-family: var(--font-mono);">m</span>
+            </div>
+          </div>
           <div class="wp-actions">
             <button class="wp-btn" id="btn-start-follow">▶ START FOLLOW</button>
             <button class="wp-btn btn-secondary" id="btn-pause-follow">⏸ PAUSE</button>
