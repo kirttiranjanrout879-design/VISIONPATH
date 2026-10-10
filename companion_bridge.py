@@ -609,12 +609,55 @@ class PixhawkBridge:
                 alt_m
             )
 
-    def send_guided_waypoint(self, distance_m, turn_deg=0.0, speed_m_s=1.0):
+    def send_guided_waypoint(self, distance_m, turn_deg=0.0, speed_m_s=1.39, alt_rel_m=0.0):
         rad = math.radians(turn_deg)
-        vx = speed_m_s * math.cos(rad)
-        vy = speed_m_s * math.sin(rad)
-        log.info(f"Executing: Guided Waypoint dist={distance_m}m, turn={turn_deg}°, vx={vx:.2f}, vy={vy:.2f}")
-        self.send_lateral_correction(vy, vx)
+        target_x = float(distance_m) * math.cos(rad)
+        target_y = float(distance_m) * math.sin(rad)
+        target_z = -float(alt_rel_m)  # NED: negative Z is upwards
+        vx = float(speed_m_s) * math.cos(rad)
+        vy = float(speed_m_s) * math.sin(rad)
+        log.info(f"Executing: Guided Waypoint dist={distance_m}m, turn={turn_deg}°, Target x(fwd)={target_x:.2f}m, y(lat)={target_y:.2f}m @ {speed_m_s}m/s")
+
+        # 1. Ensure GUIDED mode
+        if self.master:
+            try:
+                mode_id = self.master.mode_mapping().get('GUIDED', 4)
+                self.master.set_mode(mode_id)
+            except Exception as e:
+                log.warning(f"Could not set GUIDED mode: {e}")
+
+        # 2. Change Speed on Pixhack / ArduCopter
+        if self.master and speed_m_s > 0:
+            try:
+                self.master.mav.command_long_send(
+                    self.master.target_system,
+                    self.master.target_component,
+                    mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
+                    0,
+                    0,  # 0 = airspeed/groundspeed
+                    float(speed_m_s),
+                    -1, 0, 0, 0, 0
+                )
+            except Exception as e:
+                log.warning(f"Failed to set speed: {e}")
+
+        # 3. Send Position Target Local NED with MAV_FRAME_BODY_OFFSET_NED (value 9)
+        if self.master:
+            # type_mask: 0b0000111111111000 (ignore velocity, accel, yaw; use position x, y, z)
+            type_mask = 0b0000111111111000
+            self.master.mav.set_position_target_local_ned_send(
+                0,
+                self.master.target_system,
+                self.master.target_component,
+                mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
+                type_mask,
+                target_x, target_y, target_z,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0
+            )
+            log.info(f"✓ Dispatched MAVLink SET_POSITION_TARGET_LOCAL_NED (BODY_OFFSET_NED) to Pixhack: x={target_x:.2f}m, y={target_y:.2f}m")
+        return {"distance": distance_m, "turn": turn_deg, "x": target_x, "y": target_y, "speed": speed_m_s}
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -647,11 +690,28 @@ async def ws_handler(websocket, path=None):
                         cmd.get("relative", False)
                     )
                 elif action == "NAV_WAYPOINT_REL":
-                    pixhawk.send_guided_waypoint(
-                        cmd.get("distance", 1.0),
-                        cmd.get("turn", 0.0),
-                        cmd.get("speed", 1.0)
+                    dist = float(cmd.get("distance", 1.0))
+                    turn = float(cmd.get("turn", 0.0))
+                    speed = float(cmd.get("speed", 1.39))
+                    alt = float(cmd.get("alt", 0.0))
+                    res = pixhawk.send_guided_waypoint(
+                        distance_m=dist,
+                        turn_deg=turn,
+                        speed_m_s=speed,
+                        alt_rel_m=alt
                     )
+                    ack_msg = json.dumps({
+                        "type": "cmd_ack",
+                        "action": "NAV_WAYPOINT_REL",
+                        "status": "EXECUTED",
+                        "distance": dist,
+                        "turn": turn,
+                        "x": res.get("x") if res else dist,
+                        "y": res.get("y") if res else 0.0,
+                        "speed": speed,
+                        "message": f"Pixhack executing waypoint: dist={dist:.2f}m, turn={turn:.1f}°"
+                    })
+                    await websocket.send(ack_msg)
                 elif action == "CMD_NAV_TAKEOFF":
                     pixhawk.send_takeoff(cmd.get("alt", 1.5))
                 elif action == "SET_POSITION_TARGET_LOCAL_NED":

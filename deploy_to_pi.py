@@ -4,7 +4,7 @@ import time
 import paramiko
 
 PI_HOST = "10.89.89.85"
-USERNAME = "flyingbots"
+USERNAME = "bk"
 PASSWORD = "kumarrupa143"
 
 def connect():
@@ -13,7 +13,7 @@ def connect():
     print(f"[*] Connecting to {USERNAME}@{PI_HOST} with SSH...")
     try:
         client.connect(PI_HOST, port=22, username=USERNAME, password=PASSWORD, timeout=10, banner_timeout=10, auth_timeout=10)
-        print(f"[✓] LOGIN SUCCESSFUL! Connected as '{USERNAME}'")
+        print(f"[OK] LOGIN SUCCESSFUL! Connected as '{USERNAME}'")
         return client
     except Exception as e:
         print(f"[!] Login error: {e}")
@@ -22,13 +22,13 @@ def connect():
 def deploy(client):
     print("[*] Uploading companion scripts to Raspberry Pi...")
     sftp = client.open_sftp()
-    scripts = ["companion_bridge.py", "pi_agent.py", "pi_camera_server.py", "verify_pi_hardware.py"]
+    scripts = ["companion_bridge.py", "pi_mavlink_ws.py", "pi_agent.py", "pi_camera_server.py", "verify_pi_hardware.py"]
     for script in scripts:
         local_path = os.path.join(os.path.dirname(__file__), script)
         if os.path.exists(local_path):
             remote_path = f"/home/{USERNAME}/{script}"
             sftp.put(local_path, remote_path)
-            print(f"  [✓] Uploaded: {remote_path}")
+            print(f"  [OK] Uploaded: {remote_path}")
     sftp.close()
     
     print("[*] Creating media captures directory on Raspberry Pi (/home/{USERNAME}/captures)...")
@@ -52,7 +52,7 @@ def deploy(client):
     stdin, stdout, stderr = client.exec_command("pgrep -fl python3")
     res = stdout.read().decode().strip()
     if "companion_bridge.py" in res or "pi_agent.py" in res:
-        print(f"[✓] Companion Bridge is RUNNING on Raspberry Pi! Process: {res}")
+        print(f"[OK] Companion Bridge is RUNNING on Raspberry Pi! Process: {res}")
     else:
         print(f"[!] Checking logs (/home/{USERNAME}/companion_bridge.log)...")
         stdin, stdout, stderr = client.exec_command(f"cat /home/{USERNAME}/companion_bridge.log")
@@ -64,7 +64,7 @@ def deploy(client):
     print(f"[*] Open Ports on Pi:\n{ports}")
     
     client.close()
-    print("\n[✓] ALL DONE! Raspberry Pi is now streaming camera, recording media & MAVLink.")
+    print("\n[OK] ALL DONE! Raspberry Pi is now streaming camera, recording media & MAVLink.")
 
 if __name__ == '__main__':
     client = connect()

@@ -250,6 +250,7 @@ function _onWaypointsChanged(wps, activeIdx) {
             <span>m</span>
           </label>
           <span class="wp-hdg-tag">HDG ${fmt(wp.targetHeading || 0, 0)}°</span>
+          <button class="wp-fly-btn" title="Send this waypoint distance to Raspberry Pi & Pixhack" onclick="event.stopPropagation(); PathManager.executeWaypointIndex(${i})">▶ FLY</button>
         </div>
       </div>
       <button class="wp-del" title="Remove Waypoint" onclick="event.stopPropagation(); PathManager.removeWaypoint(${i})">✕</button>
@@ -374,6 +375,24 @@ function _wireEvents() {
     PathManager.pauseFollow();
     _onWaypointsChanged(PathManager.getWaypoints(), PathManager.getActiveIdx());
   });
+
+  const btnDirect = $('btn-send-direct-dist');
+  if (btnDirect) {
+    btnDirect.addEventListener('click', () => {
+      const distInput = $('direct-cmd-dist');
+      const turnInput = $('direct-cmd-turn');
+      const dist = distInput ? parseFloat(distInput.value) : 2.0;
+      const turn = turnInput ? parseFloat(turnInput.value) : 0.0;
+      if (isNaN(dist) || dist <= 0) {
+        toast('Please enter a valid distance (> 0m)', 'warn');
+        return;
+      }
+      MAVLink.setMode('GUIDED');
+      MAVLink.log('TX', `DIRECT WP DISTANCE: dist=${dist}m turn=${turn}°`);
+      MAVLink.sendGuidedWaypoint(dist, turn, 1.39);
+      toast(`🚀 Sent Waypoint Command (${dist}m, ${turn}°) to Pi & Pixhack!`, 'info', 3000);
+    });
+  }
 
   // ── Calibration ──────────────────────────────────────────────
   $('btn-calibrate').addEventListener('click', () => {

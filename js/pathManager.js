@@ -237,9 +237,9 @@ const PathManager = (() => {
       MAVLink.arm();
     }
 
-    // 2. Flight mode is always ALT_HOLD
-    MAVLink.log('TX', 'SET_MODE ALT_HOLD');
-    MAVLink.setMode('ALT_HOLD');
+    // 2. Flight mode is GUIDED for autonomous waypoint navigation
+    MAVLink.log('TX', 'SET_MODE GUIDED');
+    MAVLink.setMode('GUIDED');
 
     // 3. Target Altitude from blank input box
     const altInput = document.getElementById('target-alt-input');
@@ -247,9 +247,9 @@ const PathManager = (() => {
     if (!isNaN(customAlt) && customAlt > 0.1) {
       _targetAlt = customAlt;
       MAVLink.sendTakeoff(_targetAlt);
-      toast(`▶ Auto-armed in ALT_HOLD — climbing to ${_targetAlt}m target alt (5 km/h)`, 'ok', 3500);
+      toast(`▶ Auto-armed in GUIDED — climbing to ${_targetAlt}m target alt (5 km/h)`, 'ok', 3500);
     } else {
-      toast('▶ Auto-armed in ALT_HOLD — following path at 5 km/h', 'ok', 3500);
+      toast('▶ Auto-armed in GUIDED — following waypoint distance path (5 km/h)', 'ok', 3500);
     }
 
     // 4. Sync reference positions for real physical motion tracking
@@ -372,16 +372,37 @@ const PathManager = (() => {
     const curHdg = (telem.heading !== null) ? telem.heading : _initialHeading;
     const relTurn = normalizeAngleDeg(targetHeading - curHdg);
 
-    // 1. Send Turn / Yaw command to flight controller
-    MAVLink.log('TX', `CMD_CONDITION_YAW hdg=${fmt(targetHeading, 0)}° (turn ${relTurn > 0 ? '+' : ''}${fmt(relTurn, 1)}°)`);
-    MAVLink.sendConditionYaw(targetHeading, 20.0, false);
+    // 1. Send Turn / Yaw command to flight controller if heading delta > 3°
+    if (Math.abs(relTurn) > 3) {
+      MAVLink.log('TX', `CMD_CONDITION_YAW hdg=${fmt(targetHeading, 0)}° (turn ${relTurn > 0 ? '+' : ''}${fmt(relTurn, 1)}°)`);
+      MAVLink.sendConditionYaw(targetHeading, 20.0, false);
+    }
 
-    // 2. Flight speed strictly set to 5 km/h (5.0 / 3.6 = 1.39 m/s)
+    // 2. Flight speed: 5 km/h = 1.39 m/s
     const SPEED_5_KMH = 5.0 / 3.6; // 1.39 m/s
     const forwardSpeed = SPEED_5_KMH;
-    const vy = (relTurn > 5) ? 0.3 : (relTurn < -5) ? -0.3 : 0.0;
-    MAVLink.log('TX', `SET_POSITION_TARGET_LOCAL_NED dist=${fmt(distRem, 2)}m vx=${fmt(forwardSpeed, 2)}m/s (5 km/h)`);
+    MAVLink.log('TX', `NAV_WAYPOINT_REL [WP-${_activeIdx + 1}] dist=${fmt(distRem, 2)}m turn=${fmt(relTurn, 1)}° speed=1.39m/s`);
     MAVLink.sendGuidedWaypoint(distRem, relTurn, forwardSpeed);
+  }
+
+  // ── Execute Specific Waypoint Distance Directly ────────────────
+  function executeWaypointIndex(idx) {
+    if (idx < 0 || idx >= _waypoints.length) return;
+    const wp = _waypoints[idx];
+    const prevPt = (idx === 0) ? { metricX: _dronePos.x, metricY: _dronePos.y } : _waypoints[idx - 1];
+    const dist = (wp.distFromPrev && wp.distFromPrev > 0.05) ? wp.distFromPrev :
+                 Math.sqrt((wp.metricX - prevPt.metricX)**2 + (wp.metricY - prevPt.metricY)**2) || 2.0;
+    const turn = wp.turnAngleDeg || 0.0;
+    const speed = 5.0 / 3.6; // 1.39 m/s
+
+    _activeIdx = idx;
+    _notifyUpdate();
+
+    MAVLink.log('TX', `SET_MODE GUIDED`);
+    MAVLink.setMode('GUIDED');
+    MAVLink.log('TX', `MANUAL EXEC WP-${idx + 1}: dist=${fmt(dist, 2)}m, turn=${fmt(turn, 1)}° speed=1.39m/s`);
+    MAVLink.sendGuidedWaypoint(dist, turn, speed);
+    toast(`🚀 Dispatched WP-${idx + 1} (${fmt(dist, 2)}m, turn ${fmt(turn, 0)}°) to Raspberry Pi & Pixhack!`, 'info', 3500);
   }
 
   // ── Path Drawing with Dynamic Video Perspective AR Projection ─
@@ -711,7 +732,7 @@ const PathManager = (() => {
     getWaypoints, getActiveIdx, getDronePos, setDronePos, resetDronePos,
     addWaypoint, removeWaypoint, clearAll,
     setWaypointDistance, setWaypointTurn,
-    startFollow, pauseFollow,
+    startFollow, pauseFollow, executeWaypointIndex,
     updateNavigation, draw, getDeviation, resize,
   };
 })();

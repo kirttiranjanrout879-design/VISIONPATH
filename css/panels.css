@@ -243,6 +243,26 @@
   color: var(--c-text-dim);
 }
 
+.wp-fly-btn {
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(0, 255, 153, 0.12);
+  border: 1px solid rgba(0, 255, 153, 0.4);
+  color: #00ff99;
+  font-family: var(--font-hud);
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all var(--fast);
+  white-space: nowrap;
+}
+.wp-fly-btn:hover {
+  background: #00ff99;
+  color: #050b14;
+  box-shadow: 0 0 8px rgba(0, 255, 153, 0.5);
+}
+
 .wp-del {
   width: 18px; height: 18px;
   border-radius: 3px;

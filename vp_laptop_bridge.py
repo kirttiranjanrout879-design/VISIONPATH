@@ -373,14 +373,43 @@ class MAVLinkBridgeReader:
             alt_m
         )
 
-    def send_guided_waypoint(self, distance_m, turn_deg=0.0, speed_m_s=1.0):
+    def send_guided_waypoint(self, distance_m, turn_deg=0.0, speed_m_s=1.39, alt_rel_m=0.0):
         if not self.master or self.status != 'online':
-            return
+            log.warning('Cannot send waypoint: Pixhack MAVLink is offline')
+            return None
         rad = math.radians(turn_deg)
-        vx = speed_m_s * math.cos(rad)
-        vy = speed_m_s * math.sin(rad)
-        log.info(f'Guided Waypoint: dist={distance_m}m, turn={turn_deg}°, vx={vx:.2f}, vy={vy:.2f}')
-        self.send_position_target_local_ned(vx=vx, vy=vy, vz=0.0)
+        target_x = float(distance_m) * math.cos(rad)
+        target_y = float(distance_m) * math.sin(rad)
+        target_z = -float(alt_rel_m)  # Negative Z is up in NED
+        log.info(f'Guided Waypoint: dist={distance_m}m, turn={turn_deg}°, Target X={target_x:.2f}m, Y={target_y:.2f}m, speed={speed_m_s}m/s')
+
+        # 1. Switch to GUIDED mode if not already
+        try:
+            mapping = self.master.mode_mapping()
+            if mapping and 'GUIDED' in mapping:
+                self.master.set_mode(mapping['GUIDED'])
+        except Exception as e:
+            log.warning(f'Could not set GUIDED mode: {e}')
+
+        # 2. Set speed on Pixhack
+        if speed_m_s > 0:
+            try:
+                self.master.mav.command_long_send(
+                    self.master.target_system,
+                    self.master.target_component,
+                    mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
+                    0,
+                    0,  # 0 = airspeed/groundspeed
+                    float(speed_m_s),
+                    -1, 0, 0, 0, 0
+                )
+            except Exception as e:
+                log.warning(f'Failed to set speed: {e}')
+
+        # 3. Send position target offset (BODY_OFFSET_NED)
+        self.send_position_target_local_ned(vx=0.0, vy=0.0, vz=0.0, x=target_x, y=target_y, z=target_z)
+        log.info(f'✓ Pixhack executing target position: offset x={target_x:.2f}m, y={target_y:.2f}m')
+        return {"distance": distance_m, "turn": turn_deg, "x": target_x, "y": target_y, "speed": speed_m_s}
 
     def send_position_target_local_ned(self, vx=0.0, vy=0.0, vz=0.0, x=None, y=None, z=None):
         if not self.master or self.status != 'online':
@@ -484,11 +513,23 @@ async def ws_handler(websocket, path=None):
                             cmd.get('relative', False)
                         )
                     elif action == 'NAV_WAYPOINT_REL':
-                        bridge_reader.send_guided_waypoint(
-                            cmd.get('distance', 1.0),
-                            cmd.get('turn', 0.0),
-                            cmd.get('speed', 1.0)
-                        )
+                        dist = float(cmd.get('distance', 1.0))
+                        turn = float(cmd.get('turn', 0.0))
+                        spd  = float(cmd.get('speed', 1.39))
+                        alt  = float(cmd.get('alt', 0.0))
+                        res = bridge_reader.send_guided_waypoint(dist, turn, spd, alt)
+                        ack_msg = json.dumps({
+                            'type': 'cmd_ack',
+                            'action': 'NAV_WAYPOINT_REL',
+                            'status': 'EXECUTED',
+                            'distance': dist,
+                            'turn': turn,
+                            'x': res.get('x') if res else dist,
+                            'y': res.get('y') if res else 0.0,
+                            'speed': spd,
+                            'message': f'Pixhack executing waypoint: dist={dist:.2f}m, turn={turn:.1f}°'
+                        })
+                        await websocket.send(ack_msg)
                     elif action == 'SET_POSITION_TARGET_LOCAL_NED':
                         bridge_reader.send_position_target_local_ned(
                             vx=cmd.get('vx', 0.0),

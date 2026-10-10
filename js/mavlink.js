@@ -259,6 +259,19 @@ const MAVLink = (() => {
       return;
     }
 
+    // Command Execution Confirmation from Pi / Pixhack
+    if (msg.type === 'cmd_ack' || msg.type === 'ack') {
+      const act = msg.action || 'COMMAND';
+      const status = msg.status || 'OK';
+      const dist = (msg.distance !== undefined) ? ` dist=${msg.distance}m` : '';
+      const turn = (msg.turn !== undefined) ? ` turn=${msg.turn}°` : '';
+      log('RX', `✓ [ACK ${status}] ${act}${dist}${turn}`);
+      toast(`✓ Pixhack: ${msg.message || (act + ' ' + status)}`, 'ok', 3500);
+      const cmdEl = document.getElementById('sb-cmd');
+      if (cmdEl) cmdEl.textContent = `PIX: ${act}${dist}`;
+      return;
+    }
+
     // 3. Raw MAVLink packet format support
     if (msg.HEARTBEAT) {
       _lastHeartbeatMs = Date.now();
@@ -457,13 +470,14 @@ const MAVLink = (() => {
     });
   }
 
-  function sendGuidedWaypoint(distM, turnDeg = 0.0, speedM_s = 1.0) {
+  function sendGuidedWaypoint(distM, turnDeg = 0.0, speedM_s = 1.39, altM = 0.0) {
     if (!_wsConnected) return;
     _sendWs({
       action: 'NAV_WAYPOINT_REL',
-      distance: distM,
-      turn: turnDeg,
-      speed: speedM_s
+      distance: parseFloat(distM) || 0.0,
+      turn: parseFloat(turnDeg) || 0.0,
+      speed: parseFloat(speedM_s) || 1.39,
+      alt: parseFloat(altM) || 0.0
     });
   }
 
